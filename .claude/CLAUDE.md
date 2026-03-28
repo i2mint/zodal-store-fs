@@ -12,7 +12,7 @@ Filesystem DataProvider adapter for zodal. Implements `DataProvider<T>` from `@z
 ## Key Skill
 
 For the adapter pattern, conventions, and DataProvider contract, see:
-`/Users/thorwhalen/Dropbox/py/proj/i/zodal/.claude/skills/zodal-store-adapter/SKILL.md`
+https://github.com/i2mint/zodal/tree/main/.claude/skills/zodal-store-adapter
 
 ## Testing
 
