@@ -49,5 +49,6 @@
     "storage",
     "adapter",
     "node"
-  ]
+  ],
+  "packageManager": "pnpm@9.15.0"
 }
