@@ -10,9 +10,8 @@
 
 import { readFileSync, writeFileSync, readdirSync, unlinkSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import type { SortingState, FilterExpression } from '@zodal/core';
 import type { DataProvider, GetListParams, GetListResult, ProviderCapabilities } from '@zodal/store';
-import { filterToFunction } from '@zodal/store';
+import { applyQuery } from '@zodal/store';
 
 export interface FsProviderOptions {
   /**
@@ -102,22 +101,9 @@ export function createFsProvider<T extends Record<string, any>>(
     return String((item as any)[idField]);
   }
 
-  function matchesSearch(item: T, search: string): boolean {
-    if (!search) return true;
-    const lowerSearch = search.toLowerCase();
-    const fields = searchFields ?? Object.keys(item).filter(k => typeof (item as any)[k] === 'string');
-    return fields.some(field => {
-      const val = (item as any)[field];
-      return typeof val === 'string' && val.toLowerCase().includes(lowerSearch);
-    });
-  }
-
-  function compareValues(a: any, b: any): number {
-    if (a === b) return 0;
-    if (a == null) return -1;
-    if (b == null) return 1;
-    if (typeof a === 'string' && typeof b === 'string') return a.localeCompare(b);
-    return a < b ? -1 : 1;
+  function exists(id: string): boolean {
+    if (mode === 'directory') return existsSync(join(storagePath, `${id}.json`));
+    return readAllItems().some(i => getItemId(i) === id);
   }
 
   // --- Local getOne to avoid `this` issues ---
@@ -138,36 +124,8 @@ export function createFsProvider<T extends Record<string, any>>(
 
   return {
     async getList(params: GetListParams): Promise<GetListResult<T>> {
-      let items = readAllItems();
-
-      if (params.filter) {
-        const predicate = filterToFunction<T>(params.filter);
-        items = items.filter(predicate);
-      }
-
-      if (params.search) {
-        items = items.filter(item => matchesSearch(item, params.search!));
-      }
-
-      const total = items.length;
-
-      if (params.sort && params.sort.length > 0) {
-        items.sort((a, b) => {
-          for (const s of params.sort!) {
-            const cmp = compareValues((a as any)[s.id], (b as any)[s.id]);
-            if (cmp !== 0) return s.desc ? -cmp : cmp;
-          }
-          return 0;
-        });
-      }
-
-      if (params.pagination) {
-        const { page, pageSize } = params.pagination;
-        const start = (page - 1) * pageSize;
-        items = items.slice(start, start + pageSize);
-      }
-
-      return { data: items, total };
+      // Items are parsed fresh from disk on every call, so they are already copies.
+      return applyQuery(readAllItems(), params, { searchFields });
     },
 
     async getOne(id: string): Promise<T> {
@@ -175,10 +133,15 @@ export function createFsProvider<T extends Record<string, any>>(
     },
 
     async create(data: Partial<T>): Promise<T> {
-      const newItem = {
-        ...data,
-        [idField]: (data as any)[idField] ?? String(nextId++),
-      } as T;
+      const given = (data as any)[idField];
+      if (given != null && exists(String(given))) {
+        throw new Error(`Item already exists: ${given}`);
+      }
+      let id = given;
+      if (id == null) {
+        do id = String(nextId++); while (exists(id));
+      }
+      const newItem = { ...data, [idField]: id } as T;
       writeItem(newItem);
       return { ...newItem };
     },
