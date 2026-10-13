@@ -14,17 +14,27 @@ const UNSAFE_ID_CHARS = /[/\\\0]/;
 const RESERVED_IDS = new Set(['', '.', '..']);
 
 /**
- * Return `id` unchanged if it is safe to use as a single path segment, else throw.
+ * Return `id` as a string if it is safe to use as a single path segment, else throw.
  *
  * Rejects the empty id, `.` and `..`, and any id containing `/`, `\` or a NUL
- * byte -- which also rules out absolute paths on every platform.
+ * byte -- which also rules out absolute paths on every platform. The id is
+ * converted to a string exactly once and that string is both checked and
+ * returned, so callers must build paths from the return value: a non-string id
+ * whose `toString` changes between calls cannot pass the check as one value
+ * and reach the filesystem as another.
  */
-export function assertSafeId(id: string): string {
-  if (RESERVED_IDS.has(id) || UNSAFE_ID_CHARS.test(id)) {
+export function assertSafeId(id: unknown): string {
+  const segment = String(id);
+  if (RESERVED_IDS.has(segment) || UNSAFE_ID_CHARS.test(segment)) {
     throw new Error(
-      `Unsafe id ${JSON.stringify(id)}: ids are used as file names, so they must be non-empty, ` +
+      `Unsafe id ${JSON.stringify(segment)}: ids are used as file names, so they must be non-empty, ` +
         `must not be '.' or '..', and must not contain '/', '\\' or a NUL byte`,
     );
   }
-  return id;
+  return segment;
+}
+
+/** Check every id before a batch operation touches anything, so a bad id cannot leave it half done. */
+export function assertSafeIds(ids: readonly unknown[]): void {
+  for (const id of ids) assertSafeId(id);
 }

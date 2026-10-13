@@ -29,7 +29,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import type { DataProvider, GetListParams, GetListResult } from '@zodal/store';
 import type { ProviderCapabilities } from '@zodal/store';
-import { assertSafeId } from './safe-id.js';
+import { assertSafeId, assertSafeIds } from './safe-id.js';
 
 export interface FsBlobProviderOptions {
   /** Base directory for blob storage. */
@@ -128,6 +128,7 @@ export function createFsBlobProvider<T extends Record<string, any>>(
     },
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
+      assertSafeIds(ids);
       return Promise.all(ids.map(id => this.update(id, data)));
     },
 
@@ -136,6 +137,7 @@ export function createFsBlobProvider<T extends Record<string, any>>(
     },
 
     async deleteMany(ids: string[]): Promise<void> {
+      assertSafeIds(ids);
       await Promise.all(ids.map(id => this.delete(id)));
     },
 

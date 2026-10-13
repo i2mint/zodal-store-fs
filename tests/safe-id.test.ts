@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, rmSync, existsSync, writeFileSync, readdirSync } from 'node:fs';
+import { mkdirSync, rmSync, existsSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { DataProvider } from '@zodal/store';
@@ -17,6 +17,13 @@ describe('assertSafeId', () => {
   it.each(SAFE_IDS)('accepts %j', (id) => {
     expect(assertSafeId(id)).toBe(id);
   });
+
+  it('checks the same string it returns, even for a shape-shifting non-string id', () => {
+    let calls = 0;
+    const id = { toString: () => (calls++ ? '../victim' : 'ok') };
+    expect(assertSafeId(id)).toBe('ok');
+    expect(() => assertSafeId(['..'])).toThrow(/Unsafe id/);
+  });
 });
 
 type Factory = (storePath: string) => DataProvider<any>;
@@ -28,7 +35,8 @@ const providers: [string, Factory][] = [
 ];
 
 describe.each(providers)('%s: ids cannot escape the store', (_name, factory) => {
-  // Layout: {root}/store is the store; {root}/victim.json and {root}/victim/ sit outside it.
+  // Layout: {root}/store is the store; {root}/victim.json, {root}/victim.body.bin and
+  // {root}/victim/ sit outside it, one target per way a provider maps an id to a path.
   let root: string;
   let provider: DataProvider<any>;
 
@@ -36,6 +44,7 @@ describe.each(providers)('%s: ids cannot escape the store', (_name, factory) => 
     root = join(tmpdir(), `zodal-fs-safe-id-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     mkdirSync(join(root, 'store'), { recursive: true });
     writeFileSync(join(root, 'victim.json'), JSON.stringify({ id: 'victim', secret: true }));
+    writeFileSync(join(root, 'victim.body.bin'), 'secret');
     mkdirSync(join(root, 'victim'));
     writeFileSync(join(root, 'victim', 'body.bin'), 'secret');
     provider = factory(join(root, 'store'));
@@ -46,7 +55,7 @@ describe.each(providers)('%s: ids cannot escape the store', (_name, factory) => 
   });
 
   function outsideUntouched(): void {
-    expect(readdirSync(root).sort()).toEqual(['store', 'victim', 'victim.json']);
+    expect(readdirSync(root).sort()).toEqual(['store', 'victim', 'victim.body.bin', 'victim.json']);
     expect(readdirSync(join(root, 'victim'))).toEqual(['body.bin']);
   }
 
@@ -71,6 +80,22 @@ describe.each(providers)('%s: ids cannot escape the store', (_name, factory) => 
 
   it('deleteMany rejects a traversing id and deletes nothing outside', async () => {
     await expect(provider.deleteMany!(['../victim'])).rejects.toThrow(/Unsafe id/);
+    outsideUntouched();
+  });
+
+  it('updateMany rejects a traversing id and writes nothing outside', async () => {
+    await expect(provider.updateMany!(['../victim'], { name: 'x', body: 'x' })).rejects.toThrow(/Unsafe id/);
+    outsideUntouched();
+  });
+
+  it('a batch with one unsafe id touches nothing, inside or outside', async () => {
+    await provider.create({ id: 'a', name: 'a', body: 'a' });
+    await provider.create({ id: 'b', name: 'b', body: 'b' });
+    const before = readdirSync(join(root, 'store')).sort();
+    await expect(provider.deleteMany!(['a', '../victim', 'b'])).rejects.toThrow(/Unsafe id/);
+    await expect(provider.updateMany!(['a', '../victim', 'b'], { name: 'x' })).rejects.toThrow(/Unsafe id/);
+    expect(readdirSync(join(root, 'store')).sort()).toEqual(before);
+    expect((await provider.getOne('a')).id).toBe('a');
     outsideUntouched();
   });
 
@@ -100,5 +125,32 @@ describe('createFsProvider (file mode): ids are not paths', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+describe('createFsContentProvider: content accessors cannot escape the store', () => {
+  let root: string;
+  let provider: any;
+
+  beforeEach(() => {
+    root = join(tmpdir(), `zodal-fs-safe-id-content-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    mkdirSync(join(root, 'store'), { recursive: true });
+    writeFileSync(join(root, 'victim.body.bin'), 'secret');
+    provider = createFsContentProvider({ path: join(root, 'store'), contentFields: ['body'] });
+  });
+
+  afterEach(() => {
+    if (existsSync(root)) rmSync(root, { recursive: true, force: true });
+  });
+
+  it('getContent rejects a traversing id', async () => {
+    await expect(provider.getContent('../victim', 'body')).rejects.toThrow(/Unsafe id/);
+  });
+
+  it('setContent rejects a traversing id and writes nothing outside', async () => {
+    await expect(provider.setContent('../victim', 'body', 'overwritten')).rejects.toThrow(/Unsafe id/);
+    await expect(provider.setContent('../evil', 'body', 'x')).rejects.toThrow(/Unsafe id/);
+    expect(readdirSync(root).sort()).toEqual(['store', 'victim.body.bin']);
+    expect(readFileSync(join(root, 'victim.body.bin'), 'utf-8')).toBe('secret');
   });
 });

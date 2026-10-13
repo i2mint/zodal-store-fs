@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import type { SortingState, FilterExpression } from '@zodal/core';
 import type { DataProvider, GetListParams, GetListResult, ProviderCapabilities } from '@zodal/store';
 import { filterToFunction } from '@zodal/store';
-import { assertSafeId } from './safe-id.js';
+import { assertSafeId, assertSafeIds } from './safe-id.js';
 
 export interface FsProviderOptions {
   /**
@@ -196,6 +196,7 @@ export function createFsProvider<T extends Record<string, any>>(
     },
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
+      if (mode === 'directory') assertSafeIds(ids);
       const updated: T[] = [];
       for (const id of ids) {
         try {
@@ -231,6 +232,7 @@ export function createFsProvider<T extends Record<string, any>>(
         writeFileSync(storagePath, JSON.stringify(remaining, null, 2), 'utf-8');
         return;
       }
+      assertSafeIds(ids);
       for (const id of ids) {
         removeItem(id);
       }

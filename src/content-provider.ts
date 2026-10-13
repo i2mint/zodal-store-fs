@@ -15,7 +15,7 @@ import { join, basename } from 'node:path';
 import type { DataProvider, GetListParams, GetListResult } from '@zodal/store';
 import type { ProviderCapabilities } from '@zodal/store';
 import { filterToFunction } from '@zodal/store';
-import { assertSafeId } from './safe-id.js';
+import { assertSafeId, assertSafeIds } from './safe-id.js';
 
 /** Content reference — matches @zodal/core ContentRef (available in >= 0.2.0). */
 export interface ContentRef {
@@ -214,6 +214,7 @@ export function createFsContentProvider<T extends Record<string, any>>(
     },
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
+      assertSafeIds(ids);
       return Promise.all(ids.map(id => this.update(id, data)));
     },
 
@@ -224,6 +225,7 @@ export function createFsContentProvider<T extends Record<string, any>>(
     },
 
     async deleteMany(ids: string[]): Promise<void> {
+      assertSafeIds(ids);
       await Promise.all(ids.map(id => this.delete(id)));
     },
 
