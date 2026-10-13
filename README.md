@@ -81,6 +81,10 @@ await provider.create({ name: 'My Project', status: 'active' });
 - **Directory mode**: Better for larger datasets, allows concurrent reads, individual file diffs in version control, and partial updates without rewriting everything.
 - **File mode**: Simpler for small datasets, single file to back up or transfer, atomic reads of the full dataset.
 
+## Ids and file names
+
+Wherever an id becomes part of a file name (directory mode, `createFsContentProvider`, `createFsBlobProvider`), it must be a single ordinary path segment: non-empty, not `.` or `..`, and free of `/`, `\` and NUL. Any other id is rejected with an `Unsafe id` error before the filesystem is touched, so an id taken from a URL can never read, write or delete outside the store. File mode stores ids only inside the JSON array, so it accepts any id.
+
 ## License
 
 MIT
