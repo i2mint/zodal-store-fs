@@ -29,6 +29,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import type { DataProvider, GetListParams, GetListResult } from '@zodal/store';
 import type { ProviderCapabilities } from '@zodal/store';
+import { assertSafeId, assertSafeIds } from './safe-id.js';
 
 export interface FsBlobProviderOptions {
   /** Base directory for blob storage. */
@@ -49,12 +50,13 @@ export function createFsBlobProvider<T extends Record<string, any>>(
   const extension = options.extension ?? 'bin';
   const contentSet = new Set(contentFields);
 
+  /** The directory holding item `id`'s blobs. Throws on an id that could escape the store. */
   function blobDir(id: string): string {
-    return join(basePath, id);
+    return join(basePath, assertSafeId(id));
   }
 
   function blobPath(id: string, field: string): string {
-    return join(basePath, id, `${field}.${extension}`);
+    return join(blobDir(id), `${field}.${extension}`);
   }
 
   async function ensureDir(id: string): Promise<void> {
@@ -79,6 +81,7 @@ export function createFsBlobProvider<T extends Record<string, any>>(
   }
 
   async function deleteBlobs(id: string): Promise<void> {
+    assertSafeId(id); // before the best-effort unlinks below, which swallow errors
     for (const field of contentFields) {
       try { await fs.unlink(blobPath(id, field)); } catch { /* may not exist */ }
     }
@@ -93,6 +96,7 @@ export function createFsBlobProvider<T extends Record<string, any>>(
     },
 
     async getOne(id: string): Promise<T> {
+      assertSafeId(id); // before the per-field reads below, which swallow errors
       const result: Record<string, any> = { [idField]: id };
       for (const field of contentFields) {
         try {
@@ -124,6 +128,7 @@ export function createFsBlobProvider<T extends Record<string, any>>(
     },
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
+      assertSafeIds(ids);
       return Promise.all(ids.map(id => this.update(id, data)));
     },
 
@@ -132,6 +137,7 @@ export function createFsBlobProvider<T extends Record<string, any>>(
     },
 
     async deleteMany(ids: string[]): Promise<void> {
+      assertSafeIds(ids);
       await Promise.all(ids.map(id => this.delete(id)));
     },
 

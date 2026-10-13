@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import type { SortingState, FilterExpression } from '@zodal/core';
 import type { DataProvider, GetListParams, GetListResult, ProviderCapabilities } from '@zodal/store';
 import { filterToFunction } from '@zodal/store';
+import { assertSafeId, assertSafeIds } from './safe-id.js';
 
 export interface FsProviderOptions {
   /**
@@ -50,6 +51,11 @@ export function createFsProvider<T extends Record<string, any>>(
 
   // --- Storage helpers ---
 
+  /** Directory mode: the file holding item `id`. Throws on an id that could escape the store. */
+  function itemPath(id: string): string {
+    return join(storagePath, `${assertSafeId(id)}.json`);
+  }
+
   function readAllItems(): T[] {
     if (mode === 'file') {
       try {
@@ -81,8 +87,7 @@ export function createFsProvider<T extends Record<string, any>>(
       return;
     }
     // directory mode
-    const id = getItemId(item);
-    writeFileSync(join(storagePath, `${id}.json`), JSON.stringify(item, null, 2), 'utf-8');
+    writeFileSync(itemPath(getItemId(item)), JSON.stringify(item, null, 2), 'utf-8');
   }
 
   function removeItem(id: string): void {
@@ -92,7 +97,7 @@ export function createFsProvider<T extends Record<string, any>>(
       return;
     }
     // directory mode
-    const filePath = join(storagePath, `${id}.json`);
+    const filePath = itemPath(id);
     if (existsSync(filePath)) {
       unlinkSync(filePath);
     }
@@ -124,7 +129,7 @@ export function createFsProvider<T extends Record<string, any>>(
 
   async function getOneItem(id: string): Promise<T> {
     if (mode === 'directory') {
-      const filePath = join(storagePath, `${id}.json`);
+      const filePath = itemPath(id);
       if (!existsSync(filePath)) throw new Error(`Item not found: ${id}`);
       return JSON.parse(readFileSync(filePath, 'utf-8'));
     }
@@ -191,6 +196,7 @@ export function createFsProvider<T extends Record<string, any>>(
     },
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
+      if (mode === 'directory') assertSafeIds(ids);
       const updated: T[] = [];
       for (const id of ids) {
         try {
@@ -208,7 +214,7 @@ export function createFsProvider<T extends Record<string, any>>(
     async delete(id: string): Promise<void> {
       // Verify exists
       if (mode === 'directory') {
-        const filePath = join(storagePath, `${id}.json`);
+        const filePath = itemPath(id);
         if (!existsSync(filePath)) throw new Error(`Item not found: ${id}`);
       } else {
         const items = readAllItems();
@@ -226,6 +232,7 @@ export function createFsProvider<T extends Record<string, any>>(
         writeFileSync(storagePath, JSON.stringify(remaining, null, 2), 'utf-8');
         return;
       }
+      assertSafeIds(ids);
       for (const id of ids) {
         removeItem(id);
       }

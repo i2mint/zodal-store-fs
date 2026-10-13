@@ -15,6 +15,7 @@ import { join, basename } from 'node:path';
 import type { DataProvider, GetListParams, GetListResult } from '@zodal/store';
 import type { ProviderCapabilities } from '@zodal/store';
 import { filterToFunction } from '@zodal/store';
+import { assertSafeId, assertSafeIds } from './safe-id.js';
 
 /** Content reference — matches @zodal/core ContentRef (available in >= 0.2.0). */
 export interface ContentRef {
@@ -54,12 +55,13 @@ export function createFsContentProvider<T extends Record<string, any>>(
   const contentSet = new Set(contentFields);
   let nextId = Date.now();
 
+  // Both path builders validate the id, so no id can name a file outside basePath.
   function metaPath(id: string): string {
-    return join(basePath, `${id}.json`);
+    return join(basePath, `${assertSafeId(id)}.json`);
   }
 
   function contentPath(id: string, field: string): string {
-    return join(basePath, `${id}.${field}.${contentExtension}`);
+    return join(basePath, `${assertSafeId(id)}.${field}.${contentExtension}`);
   }
 
   function toContentRef(id: string, field: string): ContentRef {
@@ -212,15 +214,18 @@ export function createFsContentProvider<T extends Record<string, any>>(
     },
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
+      assertSafeIds(ids);
       return Promise.all(ids.map(id => this.update(id, data)));
     },
 
     async delete(id: string): Promise<void> {
+      assertSafeId(id); // before the best-effort content unlinks, which swallow errors
       await deleteContentFiles(id);
       await fs.unlink(metaPath(id));
     },
 
     async deleteMany(ids: string[]): Promise<void> {
+      assertSafeIds(ids);
       await Promise.all(ids.map(id => this.delete(id)));
     },
 
