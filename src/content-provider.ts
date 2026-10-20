@@ -61,6 +61,16 @@ export function createFsContentProvider<T extends Record<string, any>>(
         `and not 'json' (sidecars would collide with item metadata files, {id}.json)`,
     );
   }
+  // A sidecar is `{id}.{field}.{ext}`, so a dot in a field name lets two items share one:
+  // field `b.c` of item `a` and field `c` of item `a.b` are both `a.b.c.{ext}` (#8).
+  for (const field of contentFields) {
+    if (!/^[A-Za-z0-9_-]+$/.test(field)) {
+      throw new Error(
+        `createFsContentProvider: content field ${JSON.stringify(field)} must be letters, digits, '_' or '-' ` +
+          `(it is part of the sidecar file name {id}.{field}.${contentExtension}, where a dot would let two items share a file)`,
+      );
+    }
+  }
   const contentSet = new Set(contentFields);
   let nextId = Date.now();
 

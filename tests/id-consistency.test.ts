@@ -23,6 +23,14 @@ describe('createFsContentProvider: sidecars cannot collide with metadata', () =>
     );
   });
 
+  it.each(['b.c', 'a/b', 'has space', ''])('rejects content field %j', (field) => {
+    expect(() => createFsContentProvider({ path: dir, contentFields: ['body', field] })).toThrow(/content field/);
+  });
+
+  it.each(['body', 'raw_text', 'image-2'])('accepts content field %j', (field) => {
+    expect(() => createFsContentProvider({ path: dir, contentFields: [field] })).not.toThrow();
+  });
+
   it.each(['bin', 'txt', 'md', 'jsonl', 'my-ext_2'])('accepts contentExtension %j', (contentExtension) => {
     expect(() => createFsContentProvider({ path: dir, contentFields: ['body'], contentExtension })).not.toThrow();
   });
