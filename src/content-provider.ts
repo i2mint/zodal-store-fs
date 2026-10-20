@@ -15,7 +15,7 @@ import { join, basename } from 'node:path';
 import type { DataProvider, GetListParams, GetListResult } from '@zodal/store';
 import type { ProviderCapabilities } from '@zodal/store';
 import { filterToFunction } from '@zodal/store';
-import { assertIdUnchanged, assertSafeId, assertSafeIds } from './safe-id.js';
+import { assertIdUnchanged, assertSafeId, assertSafeIds, assertPortableNameParts } from './safe-id.js';
 import type { IdPolicy } from './safe-id.js';
 
 /** Content reference — matches @zodal/core ContentRef (available in >= 0.2.0). */
@@ -44,7 +44,7 @@ export interface FsContentProviderOptions {
   contentExtension?: string;
   /**
    * Which ids to accept: `'any'` safe path segment (default), or only `'portable'` ones
-   * that are a distinct file on macOS and Windows too (lowercase \`[a-z0-9._-]\`, no
+   * that are a distinct file on macOS and Windows too (lowercase `[a-z0-9._-]`, no
    * trailing dot, no device name). See {@link IdPolicy}.
    */
   ids?: IdPolicy;
@@ -79,6 +79,7 @@ export function createFsContentProvider<T extends Record<string, any>>(
       );
     }
   }
+  assertPortableNameParts([...contentFields, contentExtension], idPolicy, 'createFsContentProvider');
   const contentSet = new Set(contentFields);
   let nextId = Date.now();
 

@@ -29,7 +29,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import type { DataProvider, GetListParams, GetListResult } from '@zodal/store';
 import type { ProviderCapabilities } from '@zodal/store';
-import { assertSafeId, assertSafeIds } from './safe-id.js';
+import { assertSafeId, assertSafeIds, assertPortableNameParts } from './safe-id.js';
 import type { IdPolicy } from './safe-id.js';
 
 export interface FsBlobProviderOptions {
@@ -43,7 +43,7 @@ export interface FsBlobProviderOptions {
   extension?: string;
   /**
    * Which ids to accept: `'any'` safe path segment (default), or only `'portable'` ones
-   * that are a distinct file on macOS and Windows too (lowercase \`[a-z0-9._-]\`, no
+   * that are a distinct file on macOS and Windows too (lowercase `[a-z0-9._-]`, no
    * trailing dot, no device name). See {@link IdPolicy}.
    */
   ids?: IdPolicy;
@@ -56,6 +56,7 @@ export function createFsBlobProvider<T extends Record<string, any>>(
   const idField = options.idField ?? 'id';
   const idPolicy = options.ids ?? 'any';
   const extension = options.extension ?? 'bin';
+  assertPortableNameParts([...contentFields, extension], idPolicy, 'createFsBlobProvider');
   const contentSet = new Set(contentFields);
 
   /** The directory holding item `id`'s blobs. Throws on an id that could escape the store. */

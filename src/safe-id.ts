@@ -53,16 +53,36 @@ export function assertSafeIds(ids: readonly unknown[], policy: IdPolicy = 'any')
  *   macOS's default case- and normalization-insensitive filesystem `A` and `a` (or the
  *   NFC and NFD forms of one text) are the same file; Windows strips a trailing dot,
  *   reads `a:b` as a data stream and reserves `CON`, `NUL`, `COM1`... So: lowercase
- *   ASCII letters, digits, `.`, `_` and `-`, no trailing dot, no device name.
+ *   ASCII letters, digits, `.`, `_` and `-`, at most 200 characters, no trailing dot,
+ *   no device name. Content field names and extensions must then be lowercase too.
  */
 export type IdPolicy = 'any' | 'portable';
 
 const PORTABLE_ID = /^[a-z0-9._-]+$/;
+/** Leaves room for the `.json` / `.{field}.{ext}` suffixes within every filesystem's 255-byte name limit. */
+const MAX_PORTABLE_ID_LENGTH = 200;
 /** Windows device names, reserved with or without an extension (`nul.txt` too). */
 const WINDOWS_DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)/;
 
 function isPortableId(id: string): boolean {
-  return PORTABLE_ID.test(id) && !id.endsWith('.') && !WINDOWS_DEVICE.test(id);
+  return PORTABLE_ID.test(id) && id.length <= MAX_PORTABLE_ID_LENGTH && !id.endsWith('.') && !WINDOWS_DEVICE.test(id);
+}
+
+/**
+ * With `ids: 'portable'`, the other parts of a file name (content field names, an
+ * extension) must not differ only by case either: `a.Body.bin` and `a.body.bin` are one
+ * file on macOS. Throws naming `owner` and the offending part.
+ */
+export function assertPortableNameParts(parts: readonly string[], policy: IdPolicy, owner: string): void {
+  if (policy !== 'portable') return;
+  for (const part of parts) {
+    if (!/^[a-z0-9_-]+$/.test(part)) {
+      throw new Error(
+        `${owner}: with ids: 'portable', ${JSON.stringify(part)} must be lowercase letters, digits, '_' or '-' ` +
+          `(it is part of a file name, and names differing only by case are one file on macOS)`,
+      );
+    }
+  }
 }
 
 /**

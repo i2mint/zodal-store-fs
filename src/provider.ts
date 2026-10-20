@@ -31,7 +31,7 @@ export interface FsProviderOptions {
   searchFields?: string[];
   /**
    * Which ids to accept: `'any'` safe path segment (default), or only `'portable'` ones
-   * that are a distinct file on macOS and Windows too (lowercase \`[a-z0-9._-]\`, no
+   * that are a distinct file on macOS and Windows too (lowercase `[a-z0-9._-]`, no
    * trailing dot, no device name). See {@link IdPolicy}.
    */
   ids?: IdPolicy;

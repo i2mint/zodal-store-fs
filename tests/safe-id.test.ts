@@ -188,3 +188,18 @@ describe("ids: 'portable' (#6)", () => {
     }
   });
 });
+
+describe("ids: 'portable', review follow-ups (#6)", () => {
+  it('caps the id length', () => {
+    expect(assertSafeId('a'.repeat(200), 'portable')).toHaveLength(200);
+    expect(() => assertSafeId('a'.repeat(201), 'portable')).toThrow(/Non-portable id/);
+  });
+
+  it('requires lowercase content field names and extensions', () => {
+    const dir = join(tmpdir(), 'zodal-store-fs-never-created');
+    expect(() => createFsContentProvider({ path: dir, contentFields: ['Body'], ids: 'portable' })).toThrow(/lowercase/);
+    expect(() => createFsContentProvider({ path: dir, contentFields: ['body'], contentExtension: 'BIN', ids: 'portable' })).toThrow(/lowercase/);
+    expect(() => createFsBlobProvider({ path: dir, contentFields: ['Body'], ids: 'portable' })).toThrow(/lowercase/);
+    expect(() => createFsContentProvider({ path: dir, contentFields: ['Body'] })).not.toThrow();
+  });
+});
