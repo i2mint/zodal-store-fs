@@ -15,7 +15,7 @@ import { join, basename } from 'node:path';
 import type { DataProvider, GetListParams, GetListResult } from '@zodal/store';
 import type { ProviderCapabilities } from '@zodal/store';
 import { filterToFunction } from '@zodal/store';
-import { assertSafeId, assertSafeIds } from './safe-id.js';
+import { assertIdUnchanged, assertSafeId, assertSafeIds } from './safe-id.js';
 
 /** Content reference — matches @zodal/core ContentRef (available in >= 0.2.0). */
 export interface ContentRef {
@@ -52,6 +52,13 @@ export function createFsContentProvider<T extends Record<string, any>>(
     contentExtension = 'bin',
   } = options;
   const idField = options.idField ?? 'id';
+  // Item metadata lives in `{id}.json`, so a `json` sidecar `{id}.{field}.json` would be
+  // indistinguishable from the metadata of an item whose id is `{id}.{field}`.
+  if (contentExtension.toLowerCase() === 'json') {
+    throw new Error(
+      "createFsContentProvider: contentExtension 'json' would collide with item metadata files ({id}.json); use another extension",
+    );
+  }
   const contentSet = new Set(contentFields);
   let nextId = Date.now();
 
@@ -195,6 +202,7 @@ export function createFsContentProvider<T extends Record<string, any>>(
     },
 
     async update(id: string, data: Partial<T>): Promise<T> {
+      assertIdUnchanged(id, data, idField);
       const { meta, content } = splitFields(data as Record<string, any>);
 
       let result: Record<string, any>;
@@ -215,6 +223,7 @@ export function createFsContentProvider<T extends Record<string, any>>(
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
       assertSafeIds(ids);
+      for (const id of ids) assertIdUnchanged(id, data, idField);
       return Promise.all(ids.map(id => this.update(id, data)));
     },
 
