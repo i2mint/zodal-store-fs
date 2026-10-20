@@ -23,7 +23,7 @@ const RESERVED_IDS = new Set(['', '.', '..']);
  * whose `toString` changes between calls cannot pass the check as one value
  * and reach the filesystem as another.
  */
-export function assertSafeId(id: unknown): string {
+export function assertSafeId(id: unknown, policy: IdPolicy = 'any'): string {
   const segment = String(id);
   if (RESERVED_IDS.has(segment) || UNSAFE_ID_CHARS.test(segment)) {
     throw new Error(
@@ -31,12 +31,38 @@ export function assertSafeId(id: unknown): string {
         `must not be '.' or '..', and must not contain '/', '\\' or a NUL byte`,
     );
   }
+  if (policy === 'portable' && !isPortableId(segment)) {
+    throw new Error(
+      `Non-portable id ${JSON.stringify(segment)}: with ids: 'portable', an id must be lowercase letters, digits, ` +
+        `'.', '_' or '-', must not end in '.', and must not be a reserved Windows device name (con, nul, com1...)`,
+    );
+  }
   return segment;
 }
 
 /** Check every id before a batch operation touches anything, so a bad id cannot leave it half done. */
-export function assertSafeIds(ids: readonly unknown[]): void {
-  for (const id of ids) assertSafeId(id);
+export function assertSafeIds(ids: readonly unknown[], policy: IdPolicy = 'any'): void {
+  for (const id of ids) assertSafeId(id, policy);
+}
+
+/**
+ * Which ids a provider accepts, beyond the path-safety check every id gets.
+ *
+ * - `'any'` (default): any safe path segment. On Linux every such id is its own file.
+ * - `'portable'`: only ids that are one distinct file on every common filesystem. On
+ *   macOS's default case- and normalization-insensitive filesystem `A` and `a` (or the
+ *   NFC and NFD forms of one text) are the same file; Windows strips a trailing dot,
+ *   reads `a:b` as a data stream and reserves `CON`, `NUL`, `COM1`... So: lowercase
+ *   ASCII letters, digits, `.`, `_` and `-`, no trailing dot, no device name.
+ */
+export type IdPolicy = 'any' | 'portable';
+
+const PORTABLE_ID = /^[a-z0-9._-]+$/;
+/** Windows device names, reserved with or without an extension (`nul.txt` too). */
+const WINDOWS_DEVICE = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\.|$)/;
+
+function isPortableId(id: string): boolean {
+  return PORTABLE_ID.test(id) && !id.endsWith('.') && !WINDOWS_DEVICE.test(id);
 }
 
 /**

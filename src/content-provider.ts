@@ -16,6 +16,7 @@ import type { DataProvider, GetListParams, GetListResult } from '@zodal/store';
 import type { ProviderCapabilities } from '@zodal/store';
 import { filterToFunction } from '@zodal/store';
 import { assertIdUnchanged, assertSafeId, assertSafeIds } from './safe-id.js';
+import type { IdPolicy } from './safe-id.js';
 
 /** Content reference — matches @zodal/core ContentRef (available in >= 0.2.0). */
 export interface ContentRef {
@@ -41,6 +42,12 @@ export interface FsContentProviderOptions {
   listStrategy?: 'reference' | 'omit';
   /** File extension for content sidecar files. Default: 'bin'. */
   contentExtension?: string;
+  /**
+   * Which ids to accept: `'any'` safe path segment (default), or only `'portable'` ones
+   * that are a distinct file on macOS and Windows too (lowercase \`[a-z0-9._-]\`, no
+   * trailing dot, no device name). See {@link IdPolicy}.
+   */
+  ids?: IdPolicy;
 }
 
 export function createFsContentProvider<T extends Record<string, any>>(
@@ -52,6 +59,7 @@ export function createFsContentProvider<T extends Record<string, any>>(
     contentExtension = 'bin',
   } = options;
   const idField = options.idField ?? 'id';
+  const idPolicy = options.ids ?? 'any';
   // Item metadata lives in `{id}.json`, so a sidecar `{id}.{field}.{ext}` must never end in
   // `.json` (it would be the metadata of item `{id}.{field}`), and an extension must be one
   // plain name: no dots, separators or spaces that a filesystem could strip or interpret.
@@ -76,11 +84,11 @@ export function createFsContentProvider<T extends Record<string, any>>(
 
   // Both path builders validate the id, so no id can name a file outside basePath.
   function metaPath(id: string): string {
-    return join(basePath, `${assertSafeId(id)}.json`);
+    return join(basePath, `${assertSafeId(id, idPolicy)}.json`);
   }
 
   function contentPath(id: string, field: string): string {
-    return join(basePath, `${assertSafeId(id)}.${field}.${contentExtension}`);
+    return join(basePath, `${assertSafeId(id, idPolicy)}.${field}.${contentExtension}`);
   }
 
   function toContentRef(id: string, field: string): ContentRef {
@@ -234,19 +242,19 @@ export function createFsContentProvider<T extends Record<string, any>>(
     },
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
-      assertSafeIds(ids);
+      assertSafeIds(ids, idPolicy);
       for (const id of ids) assertIdUnchanged(id, data, idField);
       return Promise.all(ids.map(id => this.update(id, data)));
     },
 
     async delete(id: string): Promise<void> {
-      assertSafeId(id); // before the best-effort content unlinks, which swallow errors
+      assertSafeId(id, idPolicy); // before the best-effort content unlinks, which swallow errors
       await deleteContentFiles(id);
       await fs.unlink(metaPath(id));
     },
 
     async deleteMany(ids: string[]): Promise<void> {
-      assertSafeIds(ids);
+      assertSafeIds(ids, idPolicy);
       await Promise.all(ids.map(id => this.delete(id)));
     },
 

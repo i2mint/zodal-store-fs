@@ -154,3 +154,37 @@ describe('createFsContentProvider: content accessors cannot escape the store', (
     expect(readFileSync(join(root, 'victim.body.bin'), 'utf-8')).toBe('secret');
   });
 });
+
+describe("ids: 'portable' (#6)", () => {
+  it.each(['abc', '123', 'a.b', 'my-item_2', '.hidden', 'console', 'nul-x', 'com10'])('accepts %j', (id) => {
+    expect(assertSafeId(id, 'portable')).toBe(id);
+  });
+
+  it.each(['A', 'Abc', 'é', 'with space', 'a:b', 'trailing.', 'con', 'NUL', 'nul.txt', 'com1', 'lpt9.log', 'aux'])(
+    'rejects %j',
+    (id) => {
+      expect(() => assertSafeId(id, 'portable')).toThrow(/Non-portable id/);
+    },
+  );
+
+  it('still rejects unsafe ids first', () => {
+    expect(() => assertSafeId('../x', 'portable')).toThrow(/Unsafe id/);
+  });
+
+  it('is enforced by every provider, and off by default', async () => {
+    const dir = join(tmpdir(), `zodal-store-fs-portable-${process.pid}-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    try {
+      const strict = [
+        createFsProvider({ path: join(dir, 'p'), ids: 'portable' }),
+        createFsContentProvider({ path: join(dir, 'c'), contentFields: ['body'], ids: 'portable' }),
+        createFsBlobProvider({ path: join(dir, 'b'), contentFields: ['body'], ids: 'portable' }),
+      ] as DataProvider<any>[];
+      for (const p of strict) await expect(p.getOne('Item')).rejects.toThrow(/Non-portable id/);
+      const lax = createFsProvider({ path: join(dir, 'l') });
+      await expect(lax.create({ id: 'Item', name: 'x' })).resolves.toMatchObject({ id: 'Item' });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
