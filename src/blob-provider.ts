@@ -109,6 +109,10 @@ export function createFsBlobProvider<T extends Record<string, any>>(
     },
 
     async create(data: Partial<T>): Promise<T> {
+      // A blob store keeps no metadata to generate an id from: the paired metadata store owns it.
+      if ((data as any)[idField] == null) {
+        throw new Error(`createFsBlobProvider.create needs data.${idField}: blobs are stored under the item's id`);
+      }
       const id = String((data as any)[idField]);
       for (const [key, value] of Object.entries(data as Record<string, any>)) {
         if (contentSet.has(key) && value !== undefined) {

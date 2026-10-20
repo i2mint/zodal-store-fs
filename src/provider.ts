@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import type { SortingState, FilterExpression } from '@zodal/core';
 import type { DataProvider, GetListParams, GetListResult, ProviderCapabilities } from '@zodal/store';
 import { filterToFunction } from '@zodal/store';
-import { assertSafeId, assertSafeIds } from './safe-id.js';
+import { assertIdUnchanged, assertSafeId, assertSafeIds } from './safe-id.js';
 
 export interface FsProviderOptions {
   /**
@@ -189,19 +189,22 @@ export function createFsProvider<T extends Record<string, any>>(
     },
 
     async update(id: string, data: Partial<T>): Promise<T> {
+      assertIdUnchanged(id, data, idField);
       const existing = await getOneItem(id);
-      const updated = { ...existing, ...data };
+      // The stored id wins: the check above reads data once, the spread would read it again.
+      const updated = { ...existing, ...data, [idField]: (existing as any)[idField] };
       writeItem(updated);
       return { ...updated };
     },
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
       if (mode === 'directory') assertSafeIds(ids);
+      for (const id of ids) assertIdUnchanged(id, data, idField);
       const updated: T[] = [];
       for (const id of ids) {
         try {
           const existing = await getOneItem(id);
-          const item = { ...existing, ...data };
+          const item = { ...existing, ...data, [idField]: (existing as any)[idField] };
           writeItem(item);
           updated.push({ ...item });
         } catch {
@@ -239,6 +242,8 @@ export function createFsProvider<T extends Record<string, any>>(
     },
 
     async upsert(data: T): Promise<T> {
+      // Keyed by the data's own id, so without one it would write `undefined.json`.
+      if ((data as any)[idField] == null) throw new Error(`upsert needs data.${idField}`);
       const item = { ...data };
       writeItem(item);
       return { ...item };

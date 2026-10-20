@@ -15,7 +15,7 @@ import { join, basename } from 'node:path';
 import type { DataProvider, GetListParams, GetListResult } from '@zodal/store';
 import type { ProviderCapabilities } from '@zodal/store';
 import { filterToFunction } from '@zodal/store';
-import { assertSafeId, assertSafeIds } from './safe-id.js';
+import { assertIdUnchanged, assertSafeId, assertSafeIds } from './safe-id.js';
 
 /** Content reference — matches @zodal/core ContentRef (available in >= 0.2.0). */
 export interface ContentRef {
@@ -52,6 +52,15 @@ export function createFsContentProvider<T extends Record<string, any>>(
     contentExtension = 'bin',
   } = options;
   const idField = options.idField ?? 'id';
+  // Item metadata lives in `{id}.json`, so a sidecar `{id}.{field}.{ext}` must never end in
+  // `.json` (it would be the metadata of item `{id}.{field}`), and an extension must be one
+  // plain name: no dots, separators or spaces that a filesystem could strip or interpret.
+  if (!/^[A-Za-z0-9_-]+$/.test(contentExtension) || contentExtension.toLowerCase() === 'json') {
+    throw new Error(
+      `createFsContentProvider: contentExtension ${JSON.stringify(contentExtension)} must be letters, digits, '_' or '-' ` +
+        `and not 'json' (sidecars would collide with item metadata files, {id}.json)`,
+    );
+  }
   const contentSet = new Set(contentFields);
   let nextId = Date.now();
 
@@ -195,12 +204,13 @@ export function createFsContentProvider<T extends Record<string, any>>(
     },
 
     async update(id: string, data: Partial<T>): Promise<T> {
+      assertIdUnchanged(id, data, idField);
       const { meta, content } = splitFields(data as Record<string, any>);
 
       let result: Record<string, any>;
       if (Object.keys(meta).length > 0) {
         const existing = await readMeta(id);
-        result = { ...existing, ...meta };
+        result = { ...existing, ...meta, [idField]: existing[idField] };
         await writeMeta(id, result);
       } else {
         result = await readMeta(id);
@@ -215,6 +225,7 @@ export function createFsContentProvider<T extends Record<string, any>>(
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
       assertSafeIds(ids);
+      for (const id of ids) assertIdUnchanged(id, data, idField);
       return Promise.all(ids.map(id => this.update(id, data)));
     },
 

@@ -38,3 +38,22 @@ export function assertSafeId(id: unknown): string {
 export function assertSafeIds(ids: readonly unknown[]): void {
   for (const id of ids) assertSafeId(id);
 }
+
+/**
+ * Throw if `data` carries an id that differs from the `id` being updated.
+ *
+ * Paths are built from `id` (usually checked against the caller's URL), so a
+ * record whose own id field said otherwise would either be written under a
+ * different file or stored with an id that does not match its file name.
+ * Renaming an item is a create and a delete, not an update.
+ */
+export function assertIdUnchanged(id: string, data: Record<string, unknown>, idField: string): void {
+  if (!Object.prototype.hasOwnProperty.call(data, idField)) return;
+  const given = data[idField];
+  if (given !== undefined && String(given) !== String(id)) {
+    throw new Error(
+      `Cannot change ${JSON.stringify(idField)} in an update: item ${JSON.stringify(String(id))} ` +
+        `was given ${JSON.stringify(String(given))}; create the new id and delete the old one instead`,
+    );
+  }
+}
