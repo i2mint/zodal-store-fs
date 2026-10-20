@@ -8,3 +8,6 @@ export type { FsContentProviderOptions } from './content-provider.js';
 // Blob-only provider for cross-backend bifurcation
 export { createFsBlobProvider } from './blob-provider.js';
 export type { FsBlobProviderOptions } from './blob-provider.js';
+
+// Id policy shared by the providers (ids: 'portable')
+export type { IdPolicy } from './safe-id.js';

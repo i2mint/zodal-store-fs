@@ -14,6 +14,7 @@ import type { SortingState, FilterExpression } from '@zodal/core';
 import type { DataProvider, GetListParams, GetListResult, ProviderCapabilities } from '@zodal/store';
 import { filterToFunction } from '@zodal/store';
 import { assertIdUnchanged, assertSafeId, assertSafeIds } from './safe-id.js';
+import type { IdPolicy } from './safe-id.js';
 
 export interface FsProviderOptions {
   /**
@@ -28,6 +29,12 @@ export interface FsProviderOptions {
   idField?: string;
   /** Fields to include in text search. Default: all string-valued fields. */
   searchFields?: string[];
+  /**
+   * Which ids to accept: `'any'` safe path segment (default), or only `'portable'` ones
+   * that are a distinct file on macOS and Windows too (lowercase `[a-z0-9._-]`, no
+   * trailing dot, no device name). See {@link IdPolicy}.
+   */
+  ids?: IdPolicy;
 }
 
 export function createFsProvider<T extends Record<string, any>>(
@@ -36,6 +43,7 @@ export function createFsProvider<T extends Record<string, any>>(
   const { path: storagePath, searchFields } = options;
   const mode = options.mode ?? 'directory';
   const idField = options.idField ?? 'id';
+  const idPolicy = options.ids ?? 'any';
   let nextId = Date.now();
 
   // Ensure storage location exists
@@ -53,7 +61,7 @@ export function createFsProvider<T extends Record<string, any>>(
 
   /** Directory mode: the file holding item `id`. Throws on an id that could escape the store. */
   function itemPath(id: string): string {
-    return join(storagePath, `${assertSafeId(id)}.json`);
+    return join(storagePath, `${assertSafeId(id, idPolicy)}.json`);
   }
 
   function readAllItems(): T[] {
@@ -198,7 +206,7 @@ export function createFsProvider<T extends Record<string, any>>(
     },
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
-      if (mode === 'directory') assertSafeIds(ids);
+      if (mode === 'directory') assertSafeIds(ids, idPolicy);
       for (const id of ids) assertIdUnchanged(id, data, idField);
       const updated: T[] = [];
       for (const id of ids) {
@@ -235,7 +243,7 @@ export function createFsProvider<T extends Record<string, any>>(
         writeFileSync(storagePath, JSON.stringify(remaining, null, 2), 'utf-8');
         return;
       }
-      assertSafeIds(ids);
+      assertSafeIds(ids, idPolicy);
       for (const id of ids) {
         removeItem(id);
       }
