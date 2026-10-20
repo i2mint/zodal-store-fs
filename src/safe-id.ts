@@ -48,6 +48,7 @@ export function assertSafeIds(ids: readonly unknown[]): void {
  * Renaming an item is a create and a delete, not an update.
  */
 export function assertIdUnchanged(id: string, data: Record<string, unknown>, idField: string): void {
+  if (!Object.prototype.hasOwnProperty.call(data, idField)) return;
   const given = data[idField];
   if (given !== undefined && String(given) !== String(id)) {
     throw new Error(

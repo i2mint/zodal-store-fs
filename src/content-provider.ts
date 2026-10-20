@@ -52,11 +52,13 @@ export function createFsContentProvider<T extends Record<string, any>>(
     contentExtension = 'bin',
   } = options;
   const idField = options.idField ?? 'id';
-  // Item metadata lives in `{id}.json`, so a `json` sidecar `{id}.{field}.json` would be
-  // indistinguishable from the metadata of an item whose id is `{id}.{field}`.
-  if (contentExtension.toLowerCase() === 'json') {
+  // Item metadata lives in `{id}.json`, so a sidecar `{id}.{field}.{ext}` must never end in
+  // `.json` (it would be the metadata of item `{id}.{field}`), and an extension must be one
+  // plain name: no dots, separators or spaces that a filesystem could strip or interpret.
+  if (!/^[A-Za-z0-9_-]+$/.test(contentExtension) || contentExtension.toLowerCase() === 'json') {
     throw new Error(
-      "createFsContentProvider: contentExtension 'json' would collide with item metadata files ({id}.json); use another extension",
+      `createFsContentProvider: contentExtension ${JSON.stringify(contentExtension)} must be letters, digits, '_' or '-' ` +
+        `and not 'json' (sidecars would collide with item metadata files, {id}.json)`,
     );
   }
   const contentSet = new Set(contentFields);
@@ -208,7 +210,7 @@ export function createFsContentProvider<T extends Record<string, any>>(
       let result: Record<string, any>;
       if (Object.keys(meta).length > 0) {
         const existing = await readMeta(id);
-        result = { ...existing, ...meta };
+        result = { ...existing, ...meta, [idField]: existing[idField] };
         await writeMeta(id, result);
       } else {
         result = await readMeta(id);
