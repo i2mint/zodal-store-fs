@@ -11,3 +11,6 @@ export type { FsBlobProviderOptions } from './blob-provider.js';
 
 // Id policy shared by the providers (ids: 'portable')
 export type { IdPolicy } from './safe-id.js';
+
+// Provider descriptors (a backend menu: list, configure, create by name)
+export { descriptor, contentDescriptor, blobDescriptor } from './descriptor.js';

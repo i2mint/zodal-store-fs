@@ -12,7 +12,7 @@ All query operations (sort, filter, search, pagination) are evaluated client-sid
 ## Install
 
 ```bash
-npm install zodal-store-fs @zodal/core @zodal/store
+npm install @zodal/store-fs @zodal/core @zodal/store zod
 ```
 
 ## Quick Start
@@ -22,7 +22,7 @@ npm install zodal-store-fs @zodal/core @zodal/store
 Each item becomes a separate JSON file:
 
 ```typescript
-import { createFsProvider } from 'zodal-store-fs';
+import { createFsProvider } from '@zodal/store-fs';
 
 const provider = createFsProvider<Project>({
   path: './data/projects',
@@ -43,7 +43,7 @@ const { data, total } = await provider.getList({
 All items in one JSON file:
 
 ```typescript
-import { createFsProvider } from 'zodal-store-fs';
+import { createFsProvider } from '@zodal/store-fs';
 
 const provider = createFsProvider<Project>({
   path: './data/projects.json',
@@ -53,6 +53,22 @@ const provider = createFsProvider<Project>({
 // All items stored in ./data/projects.json as a JSON array
 await provider.create({ name: 'My Project', status: 'active' });
 ```
+
+## Use from a menu
+
+Each provider is also exported as a descriptor (`@zodal/store` ≥ 0.2.2): its name, runtime, options as a Zod schema, and capabilities, so an app, a playground or an agent can list it and create it by name. `create` loads the provider module only when called.
+
+```typescript
+import { createFromDescriptor } from '@zodal/store/descriptor';
+import { descriptor, contentDescriptor, blobDescriptor } from '@zodal/store-fs';
+
+const menu = [descriptor, contentDescriptor, blobDescriptor]; // 'fs', 'fsContent', 'fsBlob'; runtime 'node'
+
+// Options are validated first; a bad one fails with `Invalid options for provider "fs": ...`.
+const provider = await createFromDescriptor(descriptor, { path: './data/projects', mode: 'directory' });
+```
+
+No option is a secret or a live object, so options can be saved and shared as they are. `contentDescriptor` (metadata + content files) is marked `composite`; for a cross-backend split, give `blobDescriptor` to `bifurcatedDescriptor` from `@zodal/store/descriptor`.
 
 ## Capabilities
 

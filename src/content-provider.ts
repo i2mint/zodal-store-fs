@@ -14,7 +14,7 @@ import { promises as fs } from 'node:fs';
 import { join, basename } from 'node:path';
 import type { DataProvider, GetListParams, GetListResult } from '@zodal/store';
 import type { ProviderCapabilities } from '@zodal/store';
-import { filterToFunction } from '@zodal/store';
+import { applyQuery, compareBinary } from '@zodal/store';
 import { assertIdUnchanged, assertSafeId, assertSafeIds, assertPortableNameParts } from './safe-id.js';
 import type { IdPolicy } from './safe-id.js';
 
@@ -87,6 +87,15 @@ export function createFsContentProvider<T extends Record<string, any>>(
   function metaPath(id: string): string {
     return join(basePath, `${assertSafeId(id, idPolicy)}.json`);
   }
+  async function exists(id: string): Promise<boolean> {
+    try {
+      await fs.access(metaPath(id));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
 
   function contentPath(id: string, field: string): string {
     return join(basePath, `${assertSafeId(id, idPolicy)}.${field}.${contentExtension}`);
@@ -168,40 +177,16 @@ export function createFsContentProvider<T extends Record<string, any>>(
     return items;
   }
 
-  function matchesSearch(item: Record<string, any>, search: string): boolean {
-    if (!search) return true;
-    const lower = search.toLowerCase();
-    const fields = searchFields ?? Object.keys(item).filter(k =>
-      typeof item[k] === 'string' && !contentSet.has(k),
-    );
-    return fields.some(f => typeof item[f] === 'string' && item[f].toLowerCase().includes(lower));
-  }
 
   return {
     async getList(params: GetListParams): Promise<GetListResult<T>> {
-      let items = await listAllMeta();
-
-      if (params.filter) items = items.filter(filterToFunction(params.filter));
-      if (params.search) items = items.filter(item => matchesSearch(item, params.search!));
-
-      const total = items.length;
-
-      if (params.sort?.length) {
-        items.sort((a, b) => {
-          for (const s of params.sort!) {
-            const cmp = a[s.id] < b[s.id] ? -1 : a[s.id] > b[s.id] ? 1 : 0;
-            if (cmp !== 0) return s.desc ? -cmp : cmp;
-          }
-          return 0;
-        });
-      }
-
-      if (params.pagination) {
-        const { page, pageSize } = params.pagination;
-        items = items.slice((page - 1) * pageSize, page * pageSize);
-      }
-
-      return { data: items.map(applyContentStrategy) as T[], total };
+      // compareBinary keeps this provider's historical code-unit string order.
+      const { data, total } = applyQuery(await listAllMeta(), params, {
+        searchFields,
+        excludeFromSearch: contentSet,
+        compare: compareBinary,
+      });
+      return { data: data.map(applyContentStrategy) as T[], total };
     },
 
     async getOne(id: string): Promise<T> {
@@ -210,7 +195,12 @@ export function createFsContentProvider<T extends Record<string, any>>(
     },
 
     async create(data: Partial<T>): Promise<T> {
-      const id = String((data as any)[idField] ?? nextId++);
+      const given = (data as any)[idField];
+      if (given != null && (await exists(String(given)))) {
+        throw new Error(`Item already exists: ${given}`);
+      }
+      let id = given != null ? String(given) : String(nextId++);
+      while (given == null && (await exists(id))) id = String(nextId++);
       const withId = { ...data, [idField]: id };
       const { meta, content } = splitFields(withId as Record<string, any>);
 
@@ -243,9 +233,15 @@ export function createFsContentProvider<T extends Record<string, any>>(
     },
 
     async updateMany(ids: string[], data: Partial<T>): Promise<T[]> {
+      // Validate every id first (an unsafe id rejects the whole call), then skip ids with
+      // no item (the DataProvider contract).
       assertSafeIds(ids, idPolicy);
       for (const id of ids) assertIdUnchanged(id, data, idField);
-      return Promise.all(ids.map(id => this.update(id, data)));
+      const updated: T[] = [];
+      for (const id of ids) {
+        if (await exists(id)) updated.push(await this.update(id, data));
+      }
+      return updated;
     },
 
     async delete(id: string): Promise<void> {
@@ -255,8 +251,12 @@ export function createFsContentProvider<T extends Record<string, any>>(
     },
 
     async deleteMany(ids: string[]): Promise<void> {
+      // Validate every id first (an unsafe id rejects the whole call), then skip ids with
+      // no item (the DataProvider contract).
       assertSafeIds(ids, idPolicy);
-      await Promise.all(ids.map(id => this.delete(id)));
+      for (const id of ids) {
+        if (await exists(id)) await this.delete(id);
+      }
     },
 
     getCapabilities(): ProviderCapabilities {
